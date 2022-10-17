@@ -1,0 +1,41 @@
+Description: Template to create a VPC Endpoint
+
+Parameters:
+  VPCID:
+    Description: "Account VPC ID"
+    Type: String
+  SubnetIDs:
+    Description: "Comma separated list of subnet ids of the VPC account"
+    Type: String
+  SecurityGroupId:
+    Description: "VPC Endpoint Security Group ID"
+    Type: String
+  # The Service name can be gathererd either from the service provider after a provider service has been created.
+  ServiceName:
+    Description: "Target Service Name destination"
+    Type: String
+  AWSPrincipals:
+    Description: "Comma separated list of IAM users, IAM roles, or AWS accounts. E.g. arn:aws:iam::000000000001:root, arn:aws:iam::000000000001:root"
+    Type: String
+Resources:
+  VPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: Interface
+      ServiceName: !Ref ServiceName
+      VpcId: !Ref VPCID
+      SubnetIds: !Split [",", !Ref SubnetIDs]
+      SecurityGroupIds: 
+        - !Ref SecurityGroupId
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: !Split [",", !Ref AWSPrincipals]
+            Action: '*'
+            Resource: '*'
+Outputs:
+  VPCEndpoint:
+    Description: Endpoint ARN
+    Value: !Ref VPCEndpoint
+    Export:
+      Name: VPCEndpointArn
