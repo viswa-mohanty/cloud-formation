@@ -1,0 +1,64 @@
+Description: Template to create an S3 bucket with least-privilege access, enforced encryption, and TLS-only access
+
+Parameters:
+  BucketName:
+    Description: "Name for the S3 bucket (must be globally unique)"
+    Type: String
+  AWSPrincipals:
+    Description: "Comma separated list of IAM users, IAM roles, or AWS accounts allowed access to this bucket. E.g. arn:aws:iam::000000000001:role/my-app-role"
+    Type: String
+  AllowedActions:
+    Description: "REQUIRED. Comma separated list of the specific S3 API actions the above principals are allowed to call (e.g. s3:GetObject,s3:PutObject). Do not set this to '*' — scope it to only what the integration needs."
+    Type: String
+  ResourceArns:
+    Description: "REQUIRED. Comma separated list of the specific object/prefix ARNs this policy applies to (e.g. arn:aws:s3:::my-bucket/uploads/*). Do not set this to '*' — scope it to the exact path(s) needed."
+    Type: String
+
+Resources:
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  S3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref S3Bucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: LeastPrivilegeAccess
+            Effect: Allow
+            Principal:
+              AWS: !Split [",", !Ref AWSPrincipals]
+            Action: !Split [",", !Ref AllowedActions]
+            Resource: !Split [",", !Ref ResourceArns]
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !GetAtt S3Bucket.Arn
+              - !Sub '${S3Bucket.Arn}/*'
+            Condition:
+              Bool:
+                'aws:SecureTransport': 'false'
+
+Outputs:
+  BucketName:
+    Description: Name of the created bucket
+    Value: !Ref S3Bucket
+  BucketArn:
+    Description: ARN of the created bucket
+    Value: !GetAtt S3Bucket.Arn
