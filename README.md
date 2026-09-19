@@ -1,6 +1,6 @@
 # cloud-formation
 
-Reusable AWS CloudFormation templates demonstrating infrastructure-as-code patterns with security scoped in by design, not left as an afterthought.
+Reusable AWS CloudFormation templates demonstrating infrastructure-as-code patterns with security scoped in by design, not left as an afterthought. Three templates, three different resource-policy shapes, one consistent principle: access is explicit and minimal, never a wildcard default.
 
 ## AWS_PrivateEndpoint.yaml
 
@@ -41,3 +41,43 @@ aws cloudformation deploy \
 ```
 
 Substitute `AllowedActions` / `ResourceArns` with whatever the specific integration actually needs — that's the point of not hardcoding them.
+
+## AWS_S3BucketPolicy.yaml
+
+Creates an **S3 bucket** with encryption at rest (SSE-S3/AES256), versioning, all four Public Access Block settings enabled, and a bucket policy that combines two ideas:
+
+1. **An explicit-allow statement** scoped to `AllowedActions`/`ResourceArns` — same pattern as the endpoint template, required parameters instead of a wildcard default.
+2. **A deny-insecure-transport statement** that rejects any request not made over TLS (`aws:SecureTransport: false`).
+
+That second statement uses `Principal: '*'` and `Action: 's3:*'` — which looks like it contradicts the "never wildcard" rule above, but it doesn't: this is a `Deny`, not an `Allow`. A wildcard `Deny` gated on a condition ("deny everyone, but only when they're not using TLS") is the standard AWS-recommended pattern for enforcing encryption in transit, and it's intentionally broad because the thing being denied is narrow and universally undesirable. The distinction that matters is `Allow` scope, not wildcards in the abstract.
+
+### Deploying
+
+```bash
+aws cloudformation deploy \
+  --template-file AWS_S3BucketPolicy.yaml \
+  --stack-name my-secure-bucket \
+  --parameter-overrides \
+    BucketName=my-app-data-bucket \
+    AWSPrincipals=arn:aws:iam::111111111111:role/my-app-role \
+    AllowedActions=s3:GetObject,s3:PutObject \
+    ResourceArns=arn:aws:s3:::my-app-data-bucket/*
+```
+
+## AWS_KMSKeyPolicy.yaml
+
+Creates a **customer-managed KMS key** with key rotation enabled and a policy that separates three concerns: an `EnableIAMUserPermissions` statement delegating control to the account's IAM policies (the AWS-recommended default so the key never becomes unmanageable), a narrowly scoped `KeyAdministrators` statement for lifecycle actions (rotate, disable, delete, update policy), and a separate, narrower `KeyUsers` statement for actual encrypt/decrypt operations.
+
+Every statement here uses `Resource: '*'` — and unlike the endpoint and bucket policies above, that's correct, not a shortcut. A KMS key policy is a resource-based policy already scoped to the one key it's attached to; there's no second resource dimension to narrow. The actual scoping happens on `Principal` (who) and `Action` (what they can do), which is why administrators and users are split into separate statements instead of one broad grant.
+
+### Deploying
+
+```bash
+aws cloudformation deploy \
+  --template-file AWS_KMSKeyPolicy.yaml \
+  --stack-name my-app-data-key \
+  --parameter-overrides \
+    Alias=my-app-data-key \
+    KeyAdministrators=arn:aws:iam::111111111111:role/security-admin \
+    KeyUsers=arn:aws:iam::111111111111:role/my-app-role
+```
