@@ -1,0 +1,76 @@
+Description: Template to create a customer-managed KMS key with administrators and users scoped separately
+
+Parameters:
+  Alias:
+    Description: "Alias name for the key, without the 'alias/' prefix (e.g. my-app-data-key)"
+    Type: String
+  KeyAdministrators:
+    Description: "REQUIRED. Comma separated list of IAM roles/users allowed to administer this key (rotate, disable, delete, update its policy). Scope this narrowly — these principals can affect the key's availability."
+    Type: String
+  KeyUsers:
+    Description: "REQUIRED. Comma separated list of IAM roles/users allowed to use this key for encrypt/decrypt operations. Scope this to only the services/roles that need to read or write encrypted data."
+    Type: String
+
+Resources:
+  KMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: !Sub "Customer-managed key for ${Alias}"
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: EnableIAMUserPermissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: AllowKeyAdministration
+            Effect: Allow
+            Principal:
+              AWS: !Split [",", !Ref KeyAdministrators]
+            Action:
+              - kms:Create*
+              - kms:Describe*
+              - kms:Enable*
+              - kms:List*
+              - kms:Put*
+              - kms:Update*
+              - kms:Revoke*
+              - kms:Disable*
+              - kms:Get*
+              - kms:Delete*
+              - kms:TagResource
+              - kms:UntagResource
+              - kms:ScheduleKeyDeletion
+              - kms:CancelKeyDeletion
+            Resource: '*'
+          - Sid: AllowKeyUsageForEncryption
+            Effect: Allow
+            Principal:
+              AWS: !Split [",", !Ref KeyUsers]
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Resource: '*'
+
+  KMSAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub "alias/${Alias}"
+      TargetKeyId: !Ref KMSKey
+
+Outputs:
+  KeyId:
+    Description: KMS Key ID
+    Value: !Ref KMSKey
+  KeyArn:
+    Description: KMS Key ARN
+    Value: !GetAtt KMSKey.Arn
+  AliasName:
+    Description: KMS Key Alias
+    Value: !Sub "alias/${Alias}"
