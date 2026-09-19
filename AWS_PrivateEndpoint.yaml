@@ -17,6 +17,12 @@ Parameters:
   AWSPrincipals:
     Description: "Comma separated list of IAM users, IAM roles, or AWS accounts. E.g. arn:aws:iam::000000000001:root, arn:aws:iam::000000000001:root"
     Type: String
+  AllowedActions:
+    Description: "REQUIRED. Comma separated list of the specific API actions the above principals are allowed to call through this endpoint (e.g. execute-api:Invoke, or s3:GetObject,s3:ListBucket). Do not set this to '*' — scope it to only what the integration needs."
+    Type: String
+  ResourceArns:
+    Description: "REQUIRED. Comma separated list of the specific resource ARNs the endpoint policy applies to. Do not set this to '*' — scope it to the exact resource(s) this integration needs."
+    Type: String
 Resources:
   VPCEndpoint:
     Type: AWS::EC2::VPCEndpoint
@@ -25,14 +31,16 @@ Resources:
       ServiceName: !Ref ServiceName
       VpcId: !Ref VPCID
       SubnetIds: !Split [",", !Ref SubnetIDs]
-      SecurityGroupIds: 
+      SecurityGroupIds:
         - !Ref SecurityGroupId
       PolicyDocument:
+        Version: '2012-10-17'
         Statement:
           - Effect: Allow
-            Principal: !Split [",", !Ref AWSPrincipals]
-            Action: '*'
-            Resource: '*'
+            Principal:
+              AWS: !Split [",", !Ref AWSPrincipals]
+            Action: !Split [",", !Ref AllowedActions]
+            Resource: !Split [",", !Ref ResourceArns]
 Outputs:
   VPCEndpoint:
     Description: Endpoint ARN
